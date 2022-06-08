@@ -9,10 +9,10 @@ import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 public class Experiments {
-    private static Object MUTEX = new Object();
+    private static final Object MUTEX = new Object();
     private static final Queue<Integer> queue = new ArrayDeque<>();
 
-    public static void createNativeThreads() {
+    public static void createPlatformThreads() {
         IntStream.range(0, 1000).forEach(i -> {
             new Thread(() -> {
                 sleep(60_000);
@@ -53,14 +53,14 @@ public class Experiments {
     }
     public static void fastAndSlowTasks() throws InterruptedException {
         var threads = new ArrayList<Thread>();
-        var cores = Runtime.getRuntime().availableProcessors();
+        var cores = Runtime.getRuntime().availableProcessors(); // 8 cores
 
-        // slow task
+        // slow tasks
         IntStream.range(0, cores).forEach( i -> {
             threads.add(createSlowCPUTask());
         });
 
-        // fast task
+        // fast tasks
         IntStream.range(0, cores).forEach( i -> {
             threads.add(createFastCPUTask());
         });
@@ -71,27 +71,11 @@ public class Experiments {
     }
 
     public static void runSleepThreadPools() {
-        try (var ex = Executors.newWorkStealingPool()) {
-            IntStream.range(0, 20).forEach( i -> {
-                Runnable r = () -> {
-                    sleep(10_000);
-                    System.out.println(Thread.currentThread().getName() + ": finished. Was virtual: " + Thread.currentThread().isVirtual());
-                };
-                ex.submit(r);
-            });
-        }
+        runSleepThreadPoolsExample(Executors.newWorkStealingPool());
     }
 
     public static void runSleepVirtualPool() {
-        try (var ex = Executors.newVirtualThreadPerTaskExecutor()) {
-            IntStream.range(0, 20).forEach( i -> {
-                Runnable r = () -> {
-                    sleep(10_000);
-                    System.out.println(Thread.currentThread().getName() + ": finished. Was virtual: " + Thread.currentThread().isVirtual());
-                };
-                ex.submit(r);
-            });
-        }
+        runSleepThreadPoolsExample(Executors.newVirtualThreadPerTaskExecutor());
     }
 
     public static void blockingQueue() {
@@ -111,6 +95,7 @@ public class Experiments {
     public static void runCompletableFuture() throws ExecutionException, InterruptedException {
         ArrayBlockingQueue<String> queue = new ArrayBlockingQueue<>(1);
         int threadNum = 1000;
+
         CompletableFuture[] arr = new CompletableFuture[threadNum];
         IntStream.range(0, threadNum).forEach(i -> {
             Supplier s = () -> {
@@ -140,19 +125,32 @@ public class Experiments {
         LinkedBlockingQueue<String> queue = new LinkedBlockingQueue<>(1);
         try (executorService) {
             IntStream.range(0, 3).forEach(k -> {
-                sleep(10000);
+                sleep(5000);
                 IntStream.range(0, 1000).forEach(i -> {
                     Runnable r = () -> {
-                        System.out.println(Thread.currentThread().getName() + " entered" + Thread.currentThread().isDaemon());
+                        var currentThread = Thread.currentThread();
+                        System.out.println(currentThread.getName() + " entered. isDaemon = " + currentThread.isDaemon());
                         try {
                             String res = queue.take();
-                            System.out.println("Got: " + res );
+                            System.out.println("Got: " + res);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
                     };
                     executorService.submit(r);
                 });
+            });
+        }
+    }
+
+    private static void runSleepThreadPoolsExample(ExecutorService executorService) {
+        try (executorService) {
+            IntStream.range(0, 20).forEach(i -> {
+                Runnable r = () -> {
+                    sleep(5_000);
+                    System.out.println(Thread.currentThread().getName() + ": finished. Was virtual: " + Thread.currentThread().isVirtual());
+                };
+                executorService.submit(r);
             });
         }
     }
